@@ -1,223 +1,267 @@
 import 'dotenv/config';
 import { Telegraf, session, Markup } from 'telegraf';
 import { api } from './services/api.js';
-import { fmtOrder, fmtSom, STATUS_LABELS } from './services/formatter.js';
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// ─── Session ────────────────────────────────────────────────────────────────
-bot.use(session({ defaultSession: () => ({ step: null, order: {} }) }));
+bot.use(session({ defaultSession: () => ({ step: null, name: null, phone: null, address: null, lat: null, lng: null }) }));
 
-// ─── Keyboards ──────────────────────────────────────────────────────────────
-const mainKb = Markup.keyboard([
-  ['➕ Zakaz olish',  '📋 Zakazlar'],
-  ['📊 Hisobot',      '👥 Haydovchilar'],
-]).resize();
+// ─── /start ──────────────────────────────────────────────────────────────────
+bot.start(async ctx => {
+  ctx.session = { step: null, name: null, phone: null, address: null, lat: null, lng: null };
 
-const cancelKb = Markup.keyboard([['❌ Bekor qilish']]).resize();
+  const firstName = ctx.from.first_name || '';
+  const lastName  = ctx.from.last_name  || '';
+  const fullName  = [firstName, lastName].filter(Boolean).join(' ');
 
-// ─── /start ─────────────────────────────────────────────────────────────────
-bot.start(ctx => ctx.reply(
-  `👋 Salom, ${ctx.from.first_name}!\n\nGilam yuvish boshqaruv botiga xush kelibsiz.`,
-  mainKb,
-));
+  await ctx.reply(
+    `👋 Salom! Gilam yuvish xizmatiga xush kelibsiz!\n\nZakaz berish uchun bir necha savol beramiz.`,
+  );
 
-// ─── ZAKAZ OLISH — conversation ──────────────────────────────────────────────
-bot.hears('➕ Zakaz olish', async ctx => {
-  ctx.session.step  = 'name';
-  ctx.session.order = {};
-  await ctx.reply('👤 Mijoz ismini kiriting:', cancelKb);
+  // Ism — Telegramdan olamiz, lekin o'zgartirish imkoni beramiz
+  ctx.session.telegramName = fullName;
+  ctx.session.step = 'name';
+
+  await ctx.reply(
+    `👤 Ismingiz:\n\n"${fullName}" — Telegram profildan olindi.\n\nAgar boshqa ism kiritsangiz yozing, yoki tasdiqlash uchun tugmani bosing:`,
+    Markup.keyboard([
+      [`✅ ${fullName}`],
+    ]).resize().oneTime(),
+  );
 });
 
-bot.hears('❌ Bekor qilish', async ctx => {
-  ctx.session.step  = null;
-  ctx.session.order = {};
-  await ctx.reply('❌ Bekor qilindi.', mainKb);
-});
-
-// ─── ZAKAZLAR ro'yxati ───────────────────────────────────────────────────────
-bot.hears('📋 Zakazlar', async ctx => {
-  await ctx.reply('⏳ Yuklanmoqda...');
-  try {
-    const data   = await api.getOrders();
-    const orders = data.items || [];
-    const active = orders.filter(o => o.status !== 'yetkazildi').slice(0, 15);
-    if (!active.length) return ctx.reply('📭 Faol zakazlar yo\'q.', mainKb);
-    for (const o of active) {
-      await ctx.reply(fmtOrder(o), Markup.inlineKeyboard([
-        [Markup.button.callback('🔍 Batafsil', `order:${o.id}`)],
-      ]));
-    }
-  } catch (e) { await ctx.reply('❌ ' + e.message); }
-});
-
-// ─── HISOBOT ─────────────────────────────────────────────────────────────────
-bot.hears('📊 Hisobot', async ctx => {
-  await ctx.reply('⏳ Yuklanmoqda...');
-  try {
-    const today   = new Date().toISOString().split('T')[0];
-    const [ordersData, balances, collections] = await Promise.all([
-      api.getOrders('&limit=500'),
-      api.getBalances(),
-      api.getCollections(today),
-    ]);
-    const orders = ordersData.items || [];
-
-    const todayOrders = orders.filter(o => (o.created_at || '').slice(0, 10) === today);
-    const todayIncome = (collections.drivers || []).reduce((s, d) => s + (d.total_collected || 0), 0);
-
-    const statusLines = Object.entries(STATUS_LABELS).map(([k, label]) => {
-      const cnt = orders.filter(o => o.status === k).length;
-      return cnt > 0 ? `${label}: ${cnt} ta` : null;
-    }).filter(Boolean).join('\n');
-
-    const driverLines = (balances || [])
-      .filter(d => d.balance > 0)
-      .map(d => `  • ${d.name}: ${fmtSom(d.balance)}`)
-      .join('\n') || '  Hammasini topshirishgan';
-
-    const text = [
-      `📊 HISOBOT — ${today}`,
-      '',
-      `🆕 Bugun yangi: ${todayOrders.length} ta`,
-      `💰 Bugun yig'im: ${fmtSom(todayIncome)}`,
-      '',
-      '📦 Zakazlar holati:',
-      statusLines,
-      '',
-      `👥 Haydovchilar qo'lida:\n${driverLines}`,
-    ].join('\n');
-
-    await ctx.reply(text, mainKb);
-  } catch (e) { await ctx.reply('❌ ' + e.message); }
-});
-
-// ─── HAYDOVCHILAR BALANSI ────────────────────────────────────────────────────
-bot.hears('👥 Haydovchilar', async ctx => {
-  try {
-    const balances = await api.getBalances();
-    if (!balances.length) return ctx.reply("Haydovchilar yo'q.", mainKb);
-    const lines = balances.map(d =>
-      `👤 ${d.name}\n  Yig'im: ${fmtSom(d.total_collected)}\n  Topshirilgan: ${fmtSom(d.total_settled)}\n  Qoldiq: ${fmtSom(d.balance)}`
-    ).join('\n\n');
-    await ctx.reply(`👥 Haydovchilar balansi:\n\n${lines}`, mainKb);
-  } catch (e) { await ctx.reply('❌ ' + e.message); }
-});
-
-// ─── CALLBACK — order batafsil ────────────────────────────────────────────────
-bot.on('callback_query', async ctx => {
-  const data = ctx.callbackQuery.data;
-  await ctx.answerCbQuery();
-
-  if (data.startsWith('order:')) {
-    const id = data.split(':')[1];
-    try {
-      const o     = await api.getOrder(id);
-      const items = o.items_summary;
-      let extra   = '';
-      if (items) {
-        const parts = [];
-        if (items.total_sqm   > 0) parts.push(`${Number(items.total_sqm).toFixed(1)} m²`);
-        if (items.total_meter > 0) parts.push(`${items.total_meter} m`);
-        if (items.total_piece > 0) parts.push(`${items.total_piece} dona`);
-        if (parts.length) extra = `\n📐 O'lchov: ${parts.join(' | ')}`;
-      }
-      await ctx.reply(fmtOrder(o) + extra);
-    } catch (e) { await ctx.reply('❌ ' + e.message); }
-  }
-});
-
-// ─── MESSAGE HANDLER — conversation steps ─────────────────────────────────────
+// ─── MESSAGE HANDLER ──────────────────────────────────────────────────────────
 bot.on('message', async ctx => {
+  const step = ctx.session?.step;
   const text = ctx.message?.text || '';
-  const step = ctx.session.step;
 
-  if (!step) return; // boshqa xabarlarni e'tiborsiz qoldirish
-
+  // ── STEP 1: Ism ─────────────────────────────────────────────────────────────
   if (step === 'name') {
-    if (!text.trim()) return ctx.reply('❗ Ism kiriting:');
-    ctx.session.order.customer_name = text.trim();
+    let name = text;
+
+    // Tugma bosilsa — Telegramdan olgan ism
+    if (text.startsWith('✅ ')) name = text.slice(2).trim();
+
+    if (!name.trim()) {
+      return ctx.reply('❗ Ismingizni kiriting:');
+    }
+
+    ctx.session.name = name.trim();
     ctx.session.step = 'phone';
-    return ctx.reply('📞 Telefon raqamini kiriting:\n(masalan: 998901234567)', cancelKb);
-  }
 
-  if (step === 'phone') {
-    const digits = text.replace(/\D/g, '');
-    if (digits.length < 9) return ctx.reply('❗ To\'liq telefon raqam kiriting:');
-    ctx.session.order.phone = digits.length === 9 ? '998' + digits : digits;
-    ctx.session.step = 'address';
-    return ctx.reply('📍 Manzilni kiriting:', cancelKb);
-  }
-
-  if (step === 'address') {
-    if (!text.trim()) return ctx.reply('❗ Manzil kiriting:');
-    ctx.session.order.address = text.trim();
-    ctx.session.step = 'notes';
-    return ctx.reply(
-      "📝 Izoh kiriting (gilam turi, soni va h.)\nyoki /o'tkazib yuborish uchun - yuboring:",
-      cancelKb,
+    await ctx.reply(
+      `📞 Telefon raqamingizni yuboring:\n\nFormat: 998901234567\n\nYoki tugma orqali kontaktingizni yuboring:`,
+      Markup.keyboard([
+        [Markup.button.contactRequest('📱 Kontaktni yuborish')],
+      ]).resize().oneTime(),
     );
+    return;
   }
 
-  if (step === 'notes') {
-    ctx.session.order.notes = text.trim() === '-' ? null : text.trim();
-    ctx.session.step = 'confirm';
+  // ── STEP 2: Telefon — yozib kiritilsa ───────────────────────────────────────
+  if (step === 'phone') {
+    // Contact yuborilgan bo'lsa
+    if (ctx.message.contact) {
+      const phone = ctx.message.contact.phone_number.replace(/\D/g, '');
+      ctx.session.phone = phone.startsWith('998') ? phone : '998' + phone;
+    } else {
+      const digits = text.replace(/\D/g, '');
+      if (digits.length < 9) {
+        return ctx.reply(
+          '❗ Telefon raqam noto\'g\'ri.\n\nFormat: 998901234567 (12 ta raqam)\n\nYoki tugma orqali kontakt yuboring:',
+          Markup.keyboard([
+            [Markup.button.contactRequest('📱 Kontaktni yuborish')],
+          ]).resize().oneTime(),
+        );
+      }
+      ctx.session.phone = digits.length === 9 ? '998' + digits : digits.slice(-12);
+    }
 
-    const o = ctx.session.order;
+    ctx.session.step = 'location';
+    await ctx.reply(
+      `📍 Manzilingizni yuboring:\n\nGilam olib ketadigan joyni ko'rsating. Tugma orqali hozirgi joylashuvingizni yuboring yoki manzilni yozing:`,
+      Markup.keyboard([
+        [Markup.button.locationRequest('📍 Joylashuvni yuborish')],
+        ['✏️ Manzilni yozib kiritish'],
+      ]).resize().oneTime(),
+    );
+    return;
+  }
+
+  // ── STEP 2: Telefon — contact yuborilsa ─────────────────────────────────────
+  if (step === 'phone' && ctx.message.contact) {
+    const phone = ctx.message.contact.phone_number.replace(/\D/g, '');
+    ctx.session.phone = phone.startsWith('998') ? phone : '998' + phone;
+    ctx.session.step = 'location';
+
+    await ctx.reply(
+      `📍 Manzilingizni yuboring:`,
+      Markup.keyboard([
+        [Markup.button.locationRequest('📍 Joylashuvni yuborish')],
+        ['✏️ Manzilni yozib kiritish'],
+      ]).resize().oneTime(),
+    );
+    return;
+  }
+
+  // ── STEP 3: Manzil (yozib) ───────────────────────────────────────────────────
+  if (step === 'location') {
+    // Location yuborilgan bo'lsa
+    if (ctx.message.location) {
+      ctx.session.lat     = ctx.message.location.latitude;
+      ctx.session.lng     = ctx.message.location.longitude;
+      ctx.session.address = `📍 Joylashuv: ${ctx.session.lat.toFixed(4)}, ${ctx.session.lng.toFixed(4)}`;
+    } else if (text === '✏️ Manzilni yozib kiritish') {
+      ctx.session.step = 'address_text';
+      return ctx.reply(
+        '✏️ Manzilni yozing:\n(mahalla, ko\'cha, uy raqami)',
+        Markup.removeKeyboard(),
+      );
+    } else if (text) {
+      ctx.session.address = text.trim();
+    } else {
+      return ctx.reply(
+        'Joylashuvni yuboring yoki manzilni yozing:',
+        Markup.keyboard([
+          [Markup.button.locationRequest('📍 Joylashuvni yuborish')],
+          ['✏️ Manzilni yozib kiritish'],
+        ]).resize().oneTime(),
+      );
+    }
+
+    ctx.session.step = 'notes';
+    await ctx.reply(
+      `📝 Izoh (ixtiyoriy):\n\nGilam turi, soni yoki boshqa ma'lumot kiriting.\nYoki o'tkazib yuborish uchun tugmani bosing:`,
+      Markup.keyboard([["➡️ O'tkazib yuborish"]]).resize().oneTime(),
+    );
+    return;
+  }
+
+  // ── STEP 3b: Manzil matn shaklda ────────────────────────────────────────────
+  if (step === 'address_text') {
+    if (!text.trim()) return ctx.reply('❗ Manzilni kiriting:');
+    ctx.session.address = text.trim();
+    ctx.session.step    = 'notes';
+    await ctx.reply(
+      `📝 Izoh (ixtiyoriy):\n\nGilam turi, soni yoki boshqa ma'lumot kiriting.\nYoki o'tkazib yuborish uchun tugmani bosing:`,
+      Markup.keyboard([["➡️ O'tkazib yuborish"]]).resize().oneTime(),
+    );
+    return;
+  }
+
+  // ── STEP 4: Izoh ─────────────────────────────────────────────────────────────
+  if (step === 'notes') {
+    ctx.session.notes = (text === "➡️ O'tkazib yuborish") ? null : text.trim();
+    ctx.session.step  = 'confirm';
+
+    const s = ctx.session;
     const preview = [
       '📋 Zakaz ma\'lumotlari:',
       '',
-      `👤 Mijoz: ${o.customer_name}`,
-      `📞 Telefon: ${o.phone}`,
-      `📍 Manzil: ${o.address}`,
-      o.notes ? `📝 Izoh: ${o.notes}` : '',
+      `👤 Ism: ${s.name}`,
+      `📞 Telefon: +${s.phone}`,
+      `📍 Manzil: ${s.address}`,
+      s.notes ? `📝 Izoh: ${s.notes}` : '',
       '',
       'Tasdiqlaysizmi?',
     ].filter(l => l !== '').join('\n');
 
-    return ctx.reply(preview, Markup.keyboard([
-      ['✅ Ha, saqlash'],
-      ['✏️ Qayta kiritish', '❌ Bekor qilish'],
-    ]).resize());
+    await ctx.reply(
+      preview,
+      Markup.keyboard([
+        ['✅ Tasdiqlash'],
+        ['✏️ Qayta boshlash'],
+      ]).resize().oneTime(),
+    );
+    return;
   }
 
+  // ── STEP 5: Tasdiqlash ───────────────────────────────────────────────────────
   if (step === 'confirm') {
-    if (text === '✅ Ha, saqlash') {
+    if (text === '✅ Tasdiqlash') {
       try {
-        const o    = ctx.session.order;
-        const now  = new Date().toISOString();
+        const s   = ctx.session;
+        const now = new Date().toISOString();
+
         const result = await api.createOrder({
-          customer_name: o.customer_name,
-          phone:         o.phone,
-          address:       o.address,
-          notes:         o.notes || null,
+          customer_name: s.name,
+          phone:         s.phone,
+          address:       s.address || 'Joylashuv yuborildi',
+          notes:         s.notes   || null,
+          pickup_lat:    s.lat     || null,
+          pickup_lng:    s.lng     || null,
           pickup_date:   now,
           delivery_date: now,
           carpet_count:  0,
           carpet_types:  '',
         });
-        ctx.session.step  = null;
-        ctx.session.order = {};
+
+        ctx.session = { step: null };
+
         await ctx.reply(
-          `✅ Zakaz #${result.id} muvaffaqiyatli saqlandi!\n\n👤 ${result.customer_name}\n📞 ${result.phone}`,
-          mainKb,
+          `✅ Rahmat, ${s.name}!\n\nZakarzingiz qabul qilindi (#${result.id}).\n\n🕐 Tez orada siz bilan bog'lanamiz!\n\nYangi zakaz berish uchun /start bosing.`,
+          Markup.removeKeyboard(),
         );
       } catch (e) {
-        await ctx.reply('❌ Xatolik: ' + e.message, mainKb);
-        ctx.session.step  = null;
-        ctx.session.order = {};
+        await ctx.reply('❌ Xatolik yuz berdi: ' + e.message + '\n\nQayta urinib ko\'ring: /start');
+        ctx.session = { step: null };
       }
-    } else if (text === '✏️ Qayta kiritish') {
-      ctx.session.step  = 'name';
-      ctx.session.order = {};
-      await ctx.reply('👤 Mijoz ismini kiriting:', cancelKb);
+
+    } else if (text === '✏️ Qayta boshlash') {
+      ctx.session = { step: null };
+      await ctx.reply('Qayta boshlash uchun /start bosing.', Markup.removeKeyboard());
     }
+    return;
+  }
+
+  // Boshqa xabarlar
+  if (!step) {
+    await ctx.reply(
+      'Zakaz berish uchun /start bosing.',
+      Markup.keyboard([['/start']]).resize(),
+    );
   }
 });
 
-// ─── Launch ──────────────────────────────────────────────────────────────────
+// Location alohida handler (step=location bo'lganda)
+bot.on('location', async ctx => {
+  if (ctx.session?.step !== 'location') return;
+
+  ctx.session.lat     = ctx.message.location.latitude;
+  ctx.session.lng     = ctx.message.location.longitude;
+  ctx.session.address = `${ctx.session.lat.toFixed(5)}, ${ctx.session.lng.toFixed(5)}`;
+  ctx.session.step    = 'notes';
+
+  await ctx.reply(
+    `✅ Joylashuv qabul qilindi!\n\n📝 Izoh (ixtiyoriy):\n\nGilam turi, soni yoki boshqa ma'lumot kiriting.\nYoki o'tkazib yuborish uchun tugmani bosing:`,
+    Markup.keyboard([["➡️ O'tkazib yuborish"]]).resize().oneTime(),
+  );
+});
+
+// Contact alohida handler (step=phone bo'lganda)
+bot.on('contact', async ctx => {
+  if (ctx.session?.step !== 'phone') return;
+
+  const phone = ctx.message.contact.phone_number.replace(/\D/g, '');
+  ctx.session.phone = phone.startsWith('998') ? phone : '998' + phone;
+  ctx.session.step  = 'location';
+
+  await ctx.reply(
+    `✅ Telefon qabul qilindi!\n\n📍 Manzilingizni yuboring:`,
+    Markup.keyboard([
+      [Markup.button.locationRequest('📍 Joylashuvni yuborish')],
+      ['✏️ Manzilni yozib kiritish'],
+    ]).resize().oneTime(),
+  );
+});
+
+bot.catch((err, ctx) => {
+  console.error('Bot xatolik:', err);
+  ctx.reply("Xatolik yuz berdi. /start bilan qayta boshlang.").catch(() => {});
+});
+
 bot.launch();
-console.log('✓ Gilam bot ishga tushdi');
+console.log('✓ Gilam mijoz boti ishga tushdi');
 
 process.once('SIGINT',  () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
