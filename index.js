@@ -1,267 +1,220 @@
 import 'dotenv/config';
 import { Telegraf, session, Markup } from 'telegraf';
 import { api } from './services/api.js';
+import { t } from './i18n.js';
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-bot.use(session({ defaultSession: () => ({ step: null, name: null, phone: null, address: null, lat: null, lng: null }) }));
+bot.use(session({
+  defaultSession: () => ({ step: null, lang: null, phone: null, address: null, lat: null, lng: null }),
+}));
+
+const s = (ctx) => t[ctx.session?.lang || 'uz'];
+
+function mainKb(ctx) {
+  const l = s(ctx);
+  return Markup.keyboard([[l.orderBtn], [l.pricesBtn, l.contactBtn], [l.langBtn]]).resize();
+}
 
 // ─── /start ──────────────────────────────────────────────────────────────────
 bot.start(async ctx => {
-  ctx.session = { step: null, name: null, phone: null, address: null, lat: null, lng: null };
-
-  const firstName = ctx.from.first_name || '';
-  const lastName  = ctx.from.last_name  || '';
-  const fullName  = [firstName, lastName].filter(Boolean).join(' ');
-
+  ctx.session = { step: 'lang', lang: null };
   await ctx.reply(
-    `👋 Salom! Gilam yuvish xizmatiga xush kelibsiz!\n\nZakaz berish uchun bir necha savol beramiz.`,
-  );
-
-  // Ism — Telegramdan olamiz, lekin o'zgartirish imkoni beramiz
-  ctx.session.telegramName = fullName;
-  ctx.session.step = 'name';
-
-  await ctx.reply(
-    `👤 Ismingiz:\n\n"${fullName}" — Telegram profildan olindi.\n\nAgar boshqa ism kiritsangiz yozing, yoki tasdiqlash uchun tugmani bosing:`,
-    Markup.keyboard([
-      [`✅ ${fullName}`],
-    ]).resize().oneTime(),
+    t.uz.selectLang,
+    Markup.keyboard([[t.uz.langUz, t.uz.langCyr]]).resize().oneTime(),
   );
 });
 
-// ─── MESSAGE HANDLER ──────────────────────────────────────────────────────────
+// ─── /start ──────────────────────────────────────────────────────────────────
 bot.on('message', async ctx => {
-  const step = ctx.session?.step;
-  const text = ctx.message?.text || '';
+  const step     = ctx.session?.step;
+  const text     = ctx.message?.text || '';
+  const contact  = ctx.message?.contact;
+  const location = ctx.message?.location;
+  const l        = s(ctx);
 
-  // ── STEP 1: Ism ─────────────────────────────────────────────────────────────
-  if (step === 'name') {
-    let name = text;
-
-    // Tugma bosilsa — Telegramdan olgan ism
-    if (text.startsWith('✅ ')) name = text.slice(2).trim();
-
-    if (!name.trim()) {
-      return ctx.reply('❗ Ismingizni kiriting:');
+  // ── Til tanlash ──────────────────────────────────────────────────────────────
+  if (step === 'lang' || text === t.uz.langUz || text === t.uz.langCyr || text === '🌐 Til' || text === '🌐 Тил') {
+    if (text === t.uz.langUz || (!ctx.session.lang && step !== 'lang')) {
+      ctx.session.lang = 'uz';
+    } else if (text === t.uz.langCyr) {
+      ctx.session.lang = 'cyr';
+    } else if (text === '🌐 Til' || text === '🌐 Тил') {
+      ctx.session.step = 'lang';
+      return ctx.reply(t.uz.selectLang, Markup.keyboard([[t.uz.langUz, t.uz.langCyr]]).resize().oneTime());
+    } else if (step === 'lang') {
+      return ctx.reply(t.uz.selectLang, Markup.keyboard([[t.uz.langUz, t.uz.langCyr]]).resize().oneTime());
     }
 
-    ctx.session.name = name.trim();
-    ctx.session.step = 'phone';
-
-    await ctx.reply(
-      `📞 Telefon raqamingizni yuboring:\n\nFormat: 998901234567\n\nYoki tugma orqali kontaktingizni yuboring:`,
-      Markup.keyboard([
-        [Markup.button.contactRequest('📱 Kontaktni yuborish')],
-      ]).resize().oneTime(),
-    );
-    return;
+    if (text === t.uz.langUz || text === t.uz.langCyr) {
+      ctx.session.step = null;
+      return ctx.reply(s(ctx).welcome, mainKb(ctx));
+    }
   }
 
-  // ── STEP 2: Telefon — yozib kiritilsa ───────────────────────────────────────
+  // ── Bog'lanish ───────────────────────────────────────────────────────────────
+  if (text === l.contactBtn) {
+    return ctx.reply(l.contactText, { parse_mode: 'HTML', reply_markup: mainKb(ctx).reply_markup });
+  }
+
+  // ── Narxlar ──────────────────────────────────────────────────────────────────
+  if (text === l.pricesBtn) {
+    try {
+      const services = await api.getServices();
+      if (!Array.isArray(services) || services.length === 0) {
+        return ctx.reply('Narxlar hali kiritilmagan.', mainKb(ctx));
+      }
+      const units = { sqm: l.unitSqm, piece: l.unitPiece, meter: l.unitMeter };
+      const lines = services.map(sv => {
+        const price = Number(sv.price_per_unit).toLocaleString('ru');
+        const unit  = units[sv.unit_type] || sv.unit_type;
+        const svName = (l.serviceNames && l.serviceNames[sv.name]) || sv.name;
+        let line = `▪️ ${svName}\n   ${price} so'm / ${unit}`;
+        if (sv.discount_enabled && sv.discount_min_qty > 0 && sv.discount_amount > 0) {
+          line += `\n` + l.discountLine(sv.discount_min_qty, sv.discount_amount);
+        }
+        return line;
+      });
+      const callout = ctx.session?.lang === 'cyr'
+        ? '📲 Заказ бериш учун юқоридаги тугмани босинг'
+        : '📲 Zakaz berish uchun yuqoridagi tugmani bosing';
+      const msg = `${l.pricesTitle}${lines.join('\n\n')}\n\n${callout}`;
+      return ctx.reply(msg, mainKb(ctx));
+    } catch (e) {
+      console.error(e.message);
+      return ctx.reply('Narxlarni yuklashda xatolik.', mainKb(ctx));
+    }
+  }
+
+  // ── Zakaz boshlash ───────────────────────────────────────────────────────────
+  if (text === l.orderBtn) {
+    ctx.session.step = 'phone';
+    ctx.session.phone = null;
+    ctx.session.address = null;
+    ctx.session.lat = null;
+    ctx.session.lng = null;
+    return ctx.reply(
+      l.phonePrompt,
+      Markup.keyboard([[Markup.button.contactRequest(l.phoneBtn)]]).resize().oneTime(),
+    );
+  }
+
+  // ── Telefon ──────────────────────────────────────────────────────────────────
   if (step === 'phone') {
-    // Contact yuborilgan bo'lsa
-    if (ctx.message.contact) {
-      const phone = ctx.message.contact.phone_number.replace(/\D/g, '');
-      ctx.session.phone = phone.startsWith('998') ? phone : '998' + phone;
+    let phone;
+    if (contact) {
+      phone = contact.phone_number.replace(/\D/g, '');
+      if (!phone.startsWith('998')) phone = '998' + phone.slice(-9);
     } else {
       const digits = text.replace(/\D/g, '');
       if (digits.length < 9) {
         return ctx.reply(
-          '❗ Telefon raqam noto\'g\'ri.\n\nFormat: 998901234567 (12 ta raqam)\n\nYoki tugma orqali kontakt yuboring:',
-          Markup.keyboard([
-            [Markup.button.contactRequest('📱 Kontaktni yuborish')],
-          ]).resize().oneTime(),
+          l.phoneError,
+          Markup.keyboard([[Markup.button.contactRequest(l.phoneBtn)]]).resize().oneTime(),
         );
       }
-      ctx.session.phone = digits.length === 9 ? '998' + digits : digits.slice(-12);
+      phone = digits.length >= 12 ? digits.slice(-12) : '998' + digits.slice(-9);
     }
 
-    ctx.session.step = 'location';
-    await ctx.reply(
-      `📍 Manzilingizni yuboring:\n\nGilam olib ketadigan joyni ko'rsating. Tugma orqali hozirgi joylashuvingizni yuboring yoki manzilni yozing:`,
+    ctx.session.phone = phone;
+    ctx.session.step  = 'location';
+    return ctx.reply(
+      l.locationPrompt,
       Markup.keyboard([
-        [Markup.button.locationRequest('📍 Joylashuvni yuborish')],
-        ['✏️ Manzilni yozib kiritish'],
+        [Markup.button.locationRequest(l.locationBtn)],
+        [l.addressBtn],
       ]).resize().oneTime(),
     );
-    return;
   }
 
-  // ── STEP 2: Telefon — contact yuborilsa ─────────────────────────────────────
-  if (step === 'phone' && ctx.message.contact) {
-    const phone = ctx.message.contact.phone_number.replace(/\D/g, '');
-    ctx.session.phone = phone.startsWith('998') ? phone : '998' + phone;
-    ctx.session.step = 'location';
-
-    await ctx.reply(
-      `📍 Manzilingizni yuboring:`,
-      Markup.keyboard([
-        [Markup.button.locationRequest('📍 Joylashuvni yuborish')],
-        ['✏️ Manzilni yozib kiritish'],
-      ]).resize().oneTime(),
-    );
-    return;
-  }
-
-  // ── STEP 3: Manzil (yozib) ───────────────────────────────────────────────────
+  // ── Manzil ───────────────────────────────────────────────────────────────────
   if (step === 'location') {
-    // Location yuborilgan bo'lsa
-    if (ctx.message.location) {
-      ctx.session.lat     = ctx.message.location.latitude;
-      ctx.session.lng     = ctx.message.location.longitude;
-      ctx.session.address = `📍 Joylashuv: ${ctx.session.lat.toFixed(4)}, ${ctx.session.lng.toFixed(4)}`;
-    } else if (text === '✏️ Manzilni yozib kiritish') {
+    if (location) {
+      ctx.session.lat     = location.latitude;
+      ctx.session.lng     = location.longitude;
+      ctx.session.address = `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;
+    } else if (text === l.addressBtn) {
       ctx.session.step = 'address_text';
-      return ctx.reply(
-        '✏️ Manzilni yozing:\n(mahalla, ko\'cha, uy raqami)',
-        Markup.removeKeyboard(),
-      );
-    } else if (text) {
+      return ctx.reply(l.addressPrompt, Markup.removeKeyboard());
+    } else if (text.trim()) {
       ctx.session.address = text.trim();
-    } else {
-      return ctx.reply(
-        'Joylashuvni yuboring yoki manzilni yozing:',
-        Markup.keyboard([
-          [Markup.button.locationRequest('📍 Joylashuvni yuborish')],
-          ['✏️ Manzilni yozib kiritish'],
-        ]).resize().oneTime(),
-      );
-    }
+    } else return;
 
-    ctx.session.step = 'notes';
-    await ctx.reply(
-      `📝 Izoh (ixtiyoriy):\n\nGilam turi, soni yoki boshqa ma'lumot kiriting.\nYoki o'tkazib yuborish uchun tugmani bosing:`,
-      Markup.keyboard([["➡️ O'tkazib yuborish"]]).resize().oneTime(),
-    );
-    return;
+    return sendOrder(ctx);
   }
 
-  // ── STEP 3b: Manzil matn shaklda ────────────────────────────────────────────
+  // ── Manzil matni ─────────────────────────────────────────────────────────────
   if (step === 'address_text') {
-    if (!text.trim()) return ctx.reply('❗ Manzilni kiriting:');
+    if (!text.trim()) return ctx.reply(l.addressError);
     ctx.session.address = text.trim();
-    ctx.session.step    = 'notes';
-    await ctx.reply(
-      `📝 Izoh (ixtiyoriy):\n\nGilam turi, soni yoki boshqa ma'lumot kiriting.\nYoki o'tkazib yuborish uchun tugmani bosing:`,
-      Markup.keyboard([["➡️ O'tkazib yuborish"]]).resize().oneTime(),
-    );
-    return;
+    return sendOrder(ctx);
   }
 
-  // ── STEP 4: Izoh ─────────────────────────────────────────────────────────────
-  if (step === 'notes') {
-    ctx.session.notes = (text === "➡️ O'tkazib yuborish") ? null : text.trim();
-    ctx.session.step  = 'confirm';
-
-    const s = ctx.session;
-    const preview = [
-      '📋 Zakaz ma\'lumotlari:',
-      '',
-      `👤 Ism: ${s.name}`,
-      `📞 Telefon: +${s.phone}`,
-      `📍 Manzil: ${s.address}`,
-      s.notes ? `📝 Izoh: ${s.notes}` : '',
-      '',
-      'Tasdiqlaysizmi?',
-    ].filter(l => l !== '').join('\n');
-
-    await ctx.reply(
-      preview,
-      Markup.keyboard([
-        ['✅ Tasdiqlash'],
-        ['✏️ Qayta boshlash'],
-      ]).resize().oneTime(),
-    );
-    return;
-  }
-
-  // ── STEP 5: Tasdiqlash ───────────────────────────────────────────────────────
-  if (step === 'confirm') {
-    if (text === '✅ Tasdiqlash') {
-      try {
-        const s   = ctx.session;
-        const now = new Date().toISOString();
-
-        const result = await api.createOrder({
-          customer_name: s.name,
-          phone:         s.phone,
-          address:       s.address || 'Joylashuv yuborildi',
-          notes:         s.notes   || null,
-          pickup_lat:    s.lat     || null,
-          pickup_lng:    s.lng     || null,
-          pickup_date:   now,
-          delivery_date: now,
-          carpet_count:  0,
-          carpet_types:  '',
-        });
-
-        ctx.session = { step: null };
-
-        await ctx.reply(
-          `✅ Rahmat, ${s.name}!\n\nZakarzingiz qabul qilindi (#${result.id}).\n\n🕐 Tez orada siz bilan bog'lanamiz!\n\nYangi zakaz berish uchun /start bosing.`,
-          Markup.removeKeyboard(),
-        );
-      } catch (e) {
-        await ctx.reply('❌ Xatolik yuz berdi: ' + e.message + '\n\nQayta urinib ko\'ring: /start');
-        ctx.session = { step: null };
-      }
-
-    } else if (text === '✏️ Qayta boshlash') {
-      ctx.session = { step: null };
-      await ctx.reply('Qayta boshlash uchun /start bosing.', Markup.removeKeyboard());
-    }
-    return;
-  }
-
-  // Boshqa xabarlar
+  // Bosh holat
   if (!step) {
-    await ctx.reply(
-      'Zakaz berish uchun /start bosing.',
-      Markup.keyboard([['/start']]).resize(),
-    );
+    return ctx.reply(l.fallback, mainKb(ctx));
   }
 });
 
-// Location alohida handler (step=location bo'lganda)
-bot.on('location', async ctx => {
-  if (ctx.session?.step !== 'location') return;
+// ─── Zakazni saqlash ─────────────────────────────────────────────────────────
+async function pickDriverId() {
+  const [usersRes, ordersRes] = await Promise.all([api.getUsers(), api.getActiveOrders()]);
+  const drivers = (Array.isArray(usersRes) ? usersRes : usersRes.items || [])
+    .filter(u => u.role === 'driver' && u.is_active !== 0);
+  if (drivers.length === 0) return null;
 
-  ctx.session.lat     = ctx.message.location.latitude;
-  ctx.session.lng     = ctx.message.location.longitude;
-  ctx.session.address = `${ctx.session.lat.toFixed(5)}, ${ctx.session.lng.toFixed(5)}`;
-  ctx.session.step    = 'notes';
+  const orders = Array.isArray(ordersRes) ? ordersRes : (ordersRes.items || []);
+  const active = orders.filter(o => o.status !== 'yetkazildi');
 
-  await ctx.reply(
-    `✅ Joylashuv qabul qilindi!\n\n📝 Izoh (ixtiyoriy):\n\nGilam turi, soni yoki boshqa ma'lumot kiriting.\nYoki o'tkazib yuborish uchun tugmani bosing:`,
-    Markup.keyboard([["➡️ O'tkazib yuborish"]]).resize().oneTime(),
-  );
-});
+  const counts = {};
+  drivers.forEach(d => { counts[d.id] = 0; });
+  active.forEach(o => {
+    if (o.assigned_driver_id && counts[o.assigned_driver_id] !== undefined)
+      counts[o.assigned_driver_id]++;
+  });
 
-// Contact alohida handler (step=phone bo'lganda)
-bot.on('contact', async ctx => {
-  if (ctx.session?.step !== 'phone') return;
+  return drivers.reduce((best, d) => counts[d.id] < counts[best.id] ? d : best).id;
+}
 
-  const phone = ctx.message.contact.phone_number.replace(/\D/g, '');
-  ctx.session.phone = phone.startsWith('998') ? phone : '998' + phone;
-  ctx.session.step  = 'location';
+async function sendOrder(ctx) {
+  const sess = ctx.session;
+  const l    = s(ctx);
+  const name = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
+  const now  = new Date().toISOString();
 
-  await ctx.reply(
-    `✅ Telefon qabul qilindi!\n\n📍 Manzilingizni yuboring:`,
-    Markup.keyboard([
-      [Markup.button.locationRequest('📍 Joylashuvni yuborish')],
-      ['✏️ Manzilni yozib kiritish'],
-    ]).resize().oneTime(),
-  );
-});
+  try {
+    const driverId = await pickDriverId().catch(() => null);
+
+    const result = await api.createOrder({
+      customer_name:      name,
+      phone:              sess.phone,
+      address:            sess.address,
+      pickup_lat:         sess.lat  || null,
+      pickup_lng:         sess.lng  || null,
+      notes:              null,
+      pickup_date:        now,
+      delivery_date:      now,
+      carpet_count:       0,
+      carpet_types:       '',
+      assigned_driver_id: driverId,
+    });
+
+    ctx.session.step = null;
+    await ctx.reply(l.success, mainKb(ctx));
+  } catch (e) {
+    ctx.session.step = null;
+    console.error(e.message);
+    await ctx.reply(l.error, mainKb(ctx));
+  }
+}
 
 bot.catch((err, ctx) => {
-  console.error('Bot xatolik:', err);
-  ctx.reply("Xatolik yuz berdi. /start bilan qayta boshlang.").catch(() => {});
+  console.error('Xatolik:', err.message);
+  ctx.reply('/start bosing.').catch(() => {});
 });
 
 bot.launch();
-console.log('✓ Gilam mijoz boti ishga tushdi');
+console.log('✓ Bot ishga tushdi');
 
 process.once('SIGINT',  () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));

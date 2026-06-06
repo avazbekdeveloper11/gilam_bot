@@ -45,6 +45,9 @@ export const api = {
   getSettings:    ()         => request('/settings'),
   getBalances:    ()         => request('/settlements/balances'),
   getCollections: (date)     => request(`/orders/drivers/collections?date=${date}`),
+  getServices:    ()         => request('/services'),
+  getUsers:       ()         => request('/users'),
+  getActiveOrders: ()        => request('/orders?limit=500&page=1'),
   createOrder:    (body)     => request('/orders', {
     method: 'POST',
     body: JSON.stringify(body),
