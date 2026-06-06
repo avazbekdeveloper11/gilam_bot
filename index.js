@@ -71,7 +71,7 @@ bot.on('message', async ctx => {
         const svName = (l.serviceNames && l.serviceNames[sv.name]) || sv.name;
         let line = `▪️ ${svName}\n   ${price} so'm / ${unit}`;
         if (sv.discount_enabled && sv.discount_min_qty > 0 && sv.discount_amount > 0) {
-          line += `\n` + l.discountLine(sv.discount_min_qty, sv.discount_amount);
+          line += `\n` + l.discountLine(sv.discount_min_qty, sv.discount_amount, unit);
         }
         return line;
       });

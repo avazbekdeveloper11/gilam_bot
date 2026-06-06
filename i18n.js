@@ -44,7 +44,7 @@ Xizmatimizdan foydalanganingiz uchun rahmat! 🙏`,
     unitSqm:     `m²`,
     unitPiece:   `dona`,
     unitMeter:   `metr`,
-    discountLine: (min, pct) => `  🎁 ${min} ta va undan ko'p bo'lsa — ${pct}% chegirma`,
+    discountLine: (min, pct, unit) => `  🎁 ${min} ${unit} va undan ko'p bo'lsa — ${pct}% chegirma`,
 
     contactText: `📞 Biz bilan bog'laning:\n\n📲 <a href="tel:+998940841779">+998 94 084-17-79</a>\n📲 <a href="tel:+998930831779">+998 93 083-17-79</a>`,
 
@@ -102,7 +102,7 @@ Xizmatimizdan foydalanganingiz uchun rahmat! 🙏`,
     unitSqm:     `м²`,
     unitPiece:   `дона`,
     unitMeter:   `метр`,
-    discountLine: (min, pct) => `  🎁 ${min} та ва ундан кўп бўлса — ${pct}% чегирма`,
+    discountLine: (min, pct, unit) => `  🎁 ${min} ${unit} ва ундан кўп бўлса — ${pct}% чегирма`,
 
     contactText: `📞 Биз билан боғланинг:\n\n📲 <a href="tel:+998940841779">+998 94 084-17-79</a>\n📲 <a href="tel:+998930831779">+998 93 083-17-79</a>`,
 
