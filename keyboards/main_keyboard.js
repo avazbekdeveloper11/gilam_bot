@@ -1,6 +1,9 @@
 import { Markup } from 'telegraf';
 
 export const mainKeyboard = Markup.keyboard([
+  ['📦 Zakaz berish', '💰 Narxlar'],
+  ['🌐 Til', '📞 Aloqa'],
+  ['📍 Manzilimiz'],
   ['📋 Zakazlar', '📊 Hisobot'],
   ['👥 Haydovchilar balansi', '⚙️ Sozlamalar'],
 ]).resize();
