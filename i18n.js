@@ -46,7 +46,7 @@ Xizmatimizdan foydalanganingiz uchun rahmat! 🙏`,
     unitMeter:   `metr`,
     discountLine: (min, pct, unit) => `  🎁 ${min} ${unit} va undan ko'p bo'lsa — ${pct}% chegirma`,
 
-    contactText: `📞 Biz bilan bog'laning:\n\n📲 <a href="tel:+998940841779">+998 94 084-17-79</a>\n📲 <a href="tel:+998930831779">+998 93 083-17-79</a>`,
+    contactText: `📞 Biz bilan bog'laning:\n\n📲 <a href="tel:+998940841779">+998 94 084-17-79</a>\n📲 <a href="tel:+998930831779">+998 93 083-17-79</a>\n\n📍 <a href="https://maps.google.com/?q=39.771392,67.027932">Manzilimiz</a>`,
 
     serviceNames: {
       'Gilam':    'Gilam',
@@ -104,7 +104,7 @@ Xizmatimizdan foydalanganingiz uchun rahmat! 🙏`,
     unitMeter:   `метр`,
     discountLine: (min, pct, unit) => `  🎁 ${min} ${unit} ва ундан кўп бўлса — ${pct}% чегирма`,
 
-    contactText: `📞 Биз билан боғланинг:\n\n📲 <a href="tel:+998940841779">+998 94 084-17-79</a>\n📲 <a href="tel:+998930831779">+998 93 083-17-79</a>`,
+    contactText: `📞 Биз билан боғланинг:\n\n📲 <a href="tel:+998940841779">+998 94 084-17-79</a>\n📲 <a href="tel:+998930831779">+998 93 083-17-79</a>\n\n📍 <a href="https://maps.google.com/?q=39.771392,67.027932">Манзилимиз</a>`,
 
     serviceNames: {
       'Gilam':    'Гилам',
