@@ -43,9 +43,14 @@ export async function messageHandler(ctx) {
     return;
   }
 
-  if (text === '📞 Aloqa') {
+  if (text === "📍 Bog'lanish va manzil") {
     await ctx.reply(
       '📞 *Bog\'lanish:*\n\n📱 Telefon: +998 XX XXX XX XX\n💬 Telegram: @username\n🕐 Ish vaqti: 09:00 — 21:00',
+      { parse_mode: 'Markdown' },
+    );
+    await ctx.replyWithLocation(39.771487, 67.027948);
+    await ctx.reply(
+      '📍 *Bizning manzilimiz:*\n\nhttps://maps.google.com/?q=39.771487,67.027948',
       { parse_mode: 'Markdown' },
     );
     return;
@@ -65,15 +70,6 @@ export async function messageHandler(ctx) {
     } catch (e) {
       await ctx.reply('❌ Xatolik: ' + e.message);
     }
-    return;
-  }
-
-  if (text === '📍 Manzilimiz') {
-    await ctx.replyWithLocation(39.771487, 67.027948);
-    await ctx.reply(
-      '📍 *Bizning manzilimiz:*\n\nhttps://maps.google.com/?q=39.771487,67.027948',
-      { parse_mode: 'Markdown' },
-    );
     return;
   }
 
