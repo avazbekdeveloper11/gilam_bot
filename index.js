@@ -6,7 +6,7 @@ import { t } from './i18n.js';
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 bot.use(session({
-  defaultSession: () => ({ step: null, lang: null, phone: null, address: null, lat: null, lng: null }),
+  defaultSession: () => ({ step: null, lang: null, name: null, phone: null, address: null, lat: null, lng: null }),
 }));
 
 const s = (ctx) => t[ctx.session?.lang || 'uz'];
@@ -118,11 +118,20 @@ bot.on('message', async ctx => {
 
   // ── Zakaz boshlash ───────────────────────────────────────────────────────────
   if (text === l.orderBtn) {
-    ctx.session.step = 'phone';
+    ctx.session.step = 'name';
+    ctx.session.name = null;
     ctx.session.phone = null;
     ctx.session.address = null;
     ctx.session.lat = null;
     ctx.session.lng = null;
+    return ctx.reply(l.namePrompt, Markup.removeKeyboard());
+  }
+
+  // ── Ism ──────────────────────────────────────────────────────────────────────
+  if (step === 'name') {
+    if (!text.trim()) return ctx.reply(l.nameError);
+    ctx.session.name = text.trim();
+    ctx.session.step = 'phone';
     return ctx.reply(
       l.phonePrompt,
       Markup.keyboard([[Markup.button.contactRequest(l.phoneBtn)]]).resize().oneTime(),
@@ -209,7 +218,7 @@ async function pickDriverId() {
 async function sendOrder(ctx) {
   const sess = ctx.session;
   const l    = s(ctx);
-  const name = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
+  const name = sess.name || [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
   const now  = new Date().toISOString();
 
   try {

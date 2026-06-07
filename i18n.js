@@ -31,6 +31,9 @@ Quyidagi tugmalardan birini tanlang 👇`,
     orderItem: (id, status, date) =>
       `🔖 Buyurtma #${id}\n${status}\n🗓 ${date}`,
 
+    namePrompt: `👤 Ismingizni kiriting:`,
+    nameError:  `❗ Iltimos, ismingizni yozing:`,
+
     phonePrompt: `📱 Telefon raqamingizni yuboring.
 
 Tugmani bosib raqamingizni ulashing yoki qo'lda yozing:`,
@@ -106,6 +109,9 @@ Xizmatimizdan foydalanganingiz uchun rahmat! 🙏`,
     },
     orderItem: (id, status, date) =>
       `🔖 Буюртма #${id}\n${status}\n🗓 ${date}`,
+
+    namePrompt: `👤 Исмингизни киритинг:`,
+    nameError:  `❗ Илтимос, исмингизни ёзинг:`,
 
     phonePrompt: `📱 Телефон рақамингизни юборинг.
 
