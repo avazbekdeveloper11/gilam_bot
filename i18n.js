@@ -14,8 +14,22 @@ Quyidagi tugmalardan birini tanlang 👇`,
     pricesBtn:  `🏷 Narxlar`,
     contactBtn: `📞 Bog'lanish`,
     langBtn:    `🌐 Til`,
+    myOrdersBtn: `📋 Mening zakazlarim`,
     langUz:     `🇺🇿 O'zbekcha`,
     langCyr:    `🇺🇿 Ўзбекча`,
+
+    myOrdersTitle: `📋 *Sizning zakazlaringiz:*`,
+    noOrdersYet:   `📭 Sizda hali zakazlar yo'q.\n\nZakaz berish uchun "🧺 Zakaz berish" tugmasini bosing.`,
+    orderStatusLabels: {
+      yangi:        '🆕 Qabul qilindi, kuryer tez orada bog\'lanadi',
+      qabulQilindi: '📦 Kuryer gilamingizni olib ketdi',
+      yuvilyapti:   '🫧 Hozir yuvilmoqda',
+      upakovka:     '📫 Upakovka qilinmoqda',
+      tayyor:       '✅ Tayyor — yetkazib berishga tayyorlanmoqda',
+      yetkazildi:   '🚚 Yetkazib berildi',
+    },
+    orderItem: (id, status, date) =>
+      `🔖 Buyurtma #${id}\n${status}\n🗓 ${date}`,
 
     phonePrompt: `📱 Telefon raqamingizni yuboring.
 
@@ -72,8 +86,22 @@ Xizmatimizdan foydalanganingiz uchun rahmat! 🙏`,
     pricesBtn:  `🏷 Нархлар`,
     contactBtn: `📞 Боғланиш`,
     langBtn:    `🌐 Тил`,
+    myOrdersBtn: `📋 Менинг заказларим`,
     langUz:     `🇺🇿 O'zbekcha`,
     langCyr:    `🇺🇿 Ўзбекча`,
+
+    myOrdersTitle: `📋 *Сизнинг заказларингиз:*`,
+    noOrdersYet:   `📭 Сизда ҳали заказлар йўқ.\n\nЗаказ бериш учун "${'🧺 Заказ бериш'}" тугмасини босинг.`,
+    orderStatusLabels: {
+      yangi:        '🆕 Қабул қилинди, курьер тез орада боғланади',
+      qabulQilindi: '📦 Курьер гиламингизни олиб кетди',
+      yuvilyapti:   '🫧 Ҳозир ювилмоқда',
+      upakovka:     '📫 Упаковка қилинмоқда',
+      tayyor:       '✅ Тайёр — етказиб беришга тайёрланмоқда',
+      yetkazildi:   '🚚 Етказиб берилди',
+    },
+    orderItem: (id, status, date) =>
+      `🔖 Буюртма #${id}\n${status}\n🗓 ${date}`,
 
     phonePrompt: `📱 Телефон рақамингизни юборинг.
 

@@ -48,6 +48,7 @@ export const api = {
   getServices:    ()         => request('/services'),
   getUsers:       ()         => request('/users'),
   getActiveOrders: ()        => request('/orders?limit=500&page=1'),
+  getOrdersByChat: (chatId)  => request(`/orders/by-chat/${chatId}`),
   createOrder:    (body)     => request('/orders', {
     method: 'POST',
     body: JSON.stringify(body),

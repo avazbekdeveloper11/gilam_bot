@@ -13,7 +13,12 @@ const s = (ctx) => t[ctx.session?.lang || 'uz'];
 
 function mainKb(ctx) {
   const l = s(ctx);
-  return Markup.keyboard([[l.orderBtn], [l.pricesBtn, l.contactBtn], [l.langBtn]]).resize();
+  return Markup.keyboard([
+    [l.orderBtn],
+    [l.myOrdersBtn],
+    [l.pricesBtn, l.contactBtn],
+    [l.langBtn],
+  ]).resize();
 }
 
 // ─── /start ──────────────────────────────────────────────────────────────────
@@ -83,6 +88,34 @@ bot.on('message', async ctx => {
     } catch (e) {
       console.error(e.message);
       return ctx.reply('Narxlarni yuklashda xatolik.', mainKb(ctx));
+    }
+  }
+
+  // ── Mening zakazlarim ────────────────────────────────────────────────────────
+  if (text === l.myOrdersBtn) {
+    try {
+      const data = await api.getOrdersByChat(ctx.chat.id);
+      const orders = data?.items || [];
+      if (!orders.length) {
+        return ctx.reply(l.noOrdersYet, mainKb(ctx));
+      }
+      const dateFmt = (iso) => {
+        try {
+          const d = new Date(iso);
+          return d.toLocaleDateString('ru-RU');
+        } catch { return iso; }
+      };
+      const lines = orders.map(o => {
+        const statusLabel = l.orderStatusLabels[o.status] || o.status;
+        return l.orderItem(o.id, statusLabel, dateFmt(o.created_at));
+      });
+      return ctx.reply(`${l.myOrdersTitle}\n\n${lines.join('\n\n')}`, {
+        parse_mode: 'Markdown',
+        reply_markup: mainKb(ctx).reply_markup,
+      });
+    } catch (e) {
+      console.error(e.message);
+      return ctx.reply(l.error, mainKb(ctx));
     }
   }
 
@@ -197,6 +230,7 @@ async function sendOrder(ctx) {
       carpet_count:       0,
       carpet_types:       '',
       assigned_driver_id: driverId,
+      telegram_chat_id:   String(ctx.chat.id),
     });
 
     ctx.session.step = null;
