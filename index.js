@@ -67,7 +67,7 @@ bot.on('message', async ctx => {
     try {
       const services = await api.getServices();
       if (!Array.isArray(services) || services.length === 0) {
-        return ctx.reply('Narxlar hali kiritilmagan.', mainKb(ctx));
+        return ctx.reply(l.noPrices, mainKb(ctx));
       }
       const units = { sqm: l.unitSqm, piece: l.unitPiece, meter: l.unitMeter };
       const lines = services.map(sv => {
@@ -80,14 +80,11 @@ bot.on('message', async ctx => {
         }
         return line;
       });
-      const callout = ctx.session?.lang === 'cyr'
-        ? '📲 Заказ бериш учун юқоридаги тугмани босинг'
-        : '📲 Zakaz berish uchun yuqoridagi tugmani bosing';
-      const msg = `${l.pricesTitle}${lines.join('\n\n')}\n\n${callout}`;
+      const msg = `${l.pricesTitle}${lines.join('\n\n')}\n\n${l.pricesCallout}`;
       return ctx.reply(msg, mainKb(ctx));
     } catch (e) {
       console.error(e.message);
-      return ctx.reply('Narxlarni yuklashda xatolik.', mainKb(ctx));
+      return ctx.reply(l.pricesError, mainKb(ctx));
     }
   }
 
@@ -244,7 +241,7 @@ async function sendOrder(ctx) {
 
 bot.catch((err, ctx) => {
   console.error('Xatolik:', err.message);
-  ctx.reply('/start bosing.').catch(() => {});
+  ctx.reply(s(ctx).pressStart).catch(() => {});
 });
 
 bot.launch();
